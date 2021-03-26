@@ -86,6 +86,25 @@ enum CS_BITS
     DATA_SIZE,
     LSHF1,
     /* MODIFY: you have to add all your new control signals */
+    LOAD_PRIVELEDGE,
+    CHECK_EXECPTION,
+    CLEAR_TRAP,
+    TRAP_SEMAPHORE,
+    CC,
+    SS,
+    PP_GATE,
+    SP_GATE,
+    PSR_GATE,
+    VECTOR_GATE,
+    COND2,
+    UNIVERSAL_STACK_POINTER,
+    DESTINATION_MUX,
+    SOURCE_MUX,
+    S_POINTER,
+    P_POINTER,
+
+    //Add more
+
     CONTROL_STORE_BITS
 } CS_BITS;
 
@@ -121,6 +140,23 @@ int GetR_W(int *x) { return (x[R_W]); }
 int GetDATA_SIZE(int *x) { return (x[DATA_SIZE]); }
 int GetLSHF1(int *x) { return (x[LSHF1]); }
 /* MODIFY: you can add more Get functions for your new control signals */
+
+int GetCOND(int *x) { return ((x[COND2] << 2) + (x[COND1] << 1) + x[COND0]); }
+int GetDRMUX(int *x) { return ((x[DRMUX2] << 1) + x[DRMUX]); }
+int GetSR1MUX(int *x) { return ((x[SR1MUX2] << 1) + x[SR1MUX]); }
+int GetCC_Logic(int *x) { return (x[CC_Logic]); }
+int GetCLR_TrapFLG(int *x) { return x[CLR_TrapFLG]; }
+int GetGATEVector(int *x) { return x[GATEVector]; }
+int GetLD_CheckEXC(int *x) { return x[LD_CheckEXC]; }
+int GetSetSS(int *x) { return x[SetSS]; }
+int GetLD_PRIV(int *x) { return x[LD_PRIV]; }
+int GetGATEPSR(int *x) { return x[GATEPSR]; }
+int GetPP(int *x) { return x[PP]; }
+int GetSP(int *x) { return x[SP]; }
+int GetLD_USPSAVED(int *x) { return x[LD_USPSAVED]; }
+int GetGATEPP(int *x) { return x[GATEPP]; }
+int GetGATESP(int *x) { return x[GATESP]; }
+int GetCLR_Check(int *x) { return x[CLR_Check]; }
 
 /***************************************************************/
 /* The control store rom.                                      */
@@ -179,6 +215,10 @@ typedef struct System_Latches_Struct
     int EXCV; /* Exception vector register */
     int SSP;  /* Initial value of system stack pointer */
     /* MODIFY: You may add system latches that are required by your implementation */
+    int UNIVERSAL_SPOINTER;
+    int TRAP_BIT;
+    int PRIVELEDGE;
+    //Add stuff to here too...
 
 } System_Latches;
 
@@ -624,6 +664,86 @@ int main(int argc, char *argv[])
 
    Begin your code here 	  			       */
 /***************************************************************/
+int memory_data = 0;
+int memory_access_cycle_counter = 0;
+int mar_mux_bus_driver = 0;
+int pc_bus_driver = 0;
+int alu_bus_driver = 0;
+int shift_bus_driver = 0;
+int mdr_bus_driver = 0;
+int psr_bus_driver = 0;
+int pp_bus_driver = 0;
+int sp_bus_driver = 0;
+int vector_bus_driver = 0;
+
+int get_opcode() { return ((Low16bits(CURRENT_LATCHES.IR) & 0xF000) >> 12); }
+
+int get_bits(int value, int highest_bit, int lowest_bit)
+{
+    int mask = Low16bits(0);
+    for (int i = lowest_bit; i <= highest_bit; i++)
+    {
+        mask = Low16bits(mask + (0x0001 << i));
+    }
+    return Low16bits((value & mask) >> lowest_bit);
+}
+
+int adder_muxes()
+{
+    int result = 0;
+    int shift = GetLSHF1(CURRENT_LATCHES.MICROINSTRUCTION);
+
+    switch (GetADDR1MUX(CURRENT_LATCHES.MICROINSTRUCTION))
+    {
+    case 1:
+        if (GetSR1MUX(CURRENT_LATCHES.MICROINSTRUCTION))
+        {
+            result += CURRENT_LATCHES.REGS[get_bits(CURRENT_LATCHES.IR, 8, 6)];
+        }
+        break;
+    case 0:
+        result += CURRENT_LATCHES.PC;
+        break;
+    }
+    switch (GetADDR2MUX(CURRENT_LATCHES.MICROINSTRUCTION))
+    {
+
+    case 0:
+        result += 0;
+        break;
+    case 1:
+        if (get_bits(CURRENT_LATCHES.IR, 5, 5))
+        {
+            result += (((get_bits(CURRENT_LATCHES.IR, 5, 0)) | 0xFFFFFFE0) << shift);
+        }
+        else
+        {
+            result += (get_bits(CURRENT_LATCHES.IR, 5, 0) << shift);
+        }
+        break;
+    case 2:
+        if (get_bits(CURRENT_LATCHES.IR, 8, 8))
+        {
+            result += (((get_bits(CURRENT_LATCHES.IR, 8, 0)) | 0xFFFFFF00) << shift);
+        }
+        else
+        {
+            result += (get_bits(CURRENT_LATCHES.IR, 8, 0) << shift);
+        }
+        break;
+    case 3:
+        if (get_bits(CURRENT_LATCHES.IR, 10, 10))
+        {
+            result += (((get_bits(CURRENT_LATCHES.IR, 10, 0)) | 0xFFFFFC00) << shift);
+        }
+        else
+        {
+            result += (get_bits(CURRENT_LATCHES.IR, 10, 0) << shift);
+        }
+        break;
+    }
+    return result;
+}
 
 void eval_micro_sequencer()
 {
@@ -657,6 +777,18 @@ void eval_micro_sequencer()
         case 3:
             //compare the priority bit
             NEXT_LATCHES.STATE_NUMBER = Low16bits(GetJ(CURRENT_LATCHES.MICROINSTRUCTION)) | Low16bits(get_bits(CURRENT_LATCHES.IR, 11, 11));
+            break;
+        case 4:
+            NEXT_LATCHES.STATE_NUMBER = (GetJ(CURRENT_LATCHES.MICROINSTRUCTION)) ^ ((CURRENT_LATCHES.EXC ^ CURRENT_LATCHES.INT_Signal) << 3);
+            break;
+        case 5:
+            if (CURRENT_LATCHES.EXC)
+            {
+                NEXT_LATCHES.STATE_NUMBER = 0x3F;
+            }
+            break;
+        case 6:
+            NEXT_LATCHES.STATE_NUMBER = (GetJ(CURRENT_LATCHES.MICROINSTRUCTION)) ^ (CURRENT_LATCHES.PRIV << 4);
             break;
         }
     }
@@ -726,6 +858,185 @@ void cycle_memory()
     }
 }
 
+int mar_gate_value()
+{
+    if (GetMARMUX(CURRENT_LATCHES.MICROINSTRUCTION))
+    {
+        return adder_muxes();
+    }
+    return ((CURRENT_LATCHES.IR & 0x00FF) << 1);
+}
+
+int pc_gate_value()
+{
+    return CURRENT_LATCHES.PC;
+}
+
+int alu_gate_value()
+{
+    int steering_bit = Low16bits(get_bits(CURRENT_LATCHES.IR, 5, 5));
+    int sign_bit = (get_bits(CURRENT_LATCHES.IR, 4, 4));
+    switch (GetALUK(CURRENT_LATCHES.MICROINSTRUCTION))
+    {
+
+    case 0: // ADD
+        if (steering_bit)
+        {
+            if (sign_bit)
+            {
+
+                return (CURRENT_LATCHES.REGS[get_bits(CURRENT_LATCHES.IR, 8, 6)]) + (get_bits(CURRENT_LATCHES.IR, 4, 0) | 0xFFFFFFF0);
+            }
+            else
+            {
+                return (CURRENT_LATCHES.REGS[get_bits(CURRENT_LATCHES.IR, 8, 6)]) + (get_bits(CURRENT_LATCHES.IR, 4, 0));
+            }
+        }
+        else
+        {
+            return (CURRENT_LATCHES.REGS[get_bits(CURRENT_LATCHES.IR, 8, 6)]) + (CURRENT_LATCHES.REGS[get_bits(CURRENT_LATCHES.IR, 2, 0)]);
+        }
+        break;
+    case 1: // AND
+        if (steering_bit)
+        {
+            if (sign_bit)
+            {
+
+                return (CURRENT_LATCHES.REGS[get_bits(CURRENT_LATCHES.IR, 8, 6)]) & (get_bits(CURRENT_LATCHES.IR, 4, 0) | 0xFFFFFFF0);
+            }
+            else
+            {
+                return (CURRENT_LATCHES.REGS[get_bits(CURRENT_LATCHES.IR, 8, 6)]) & (get_bits(CURRENT_LATCHES.IR, 4, 0));
+            }
+        }
+        else
+        {
+            return (CURRENT_LATCHES.REGS[get_bits(CURRENT_LATCHES.IR, 8, 6)]) & (CURRENT_LATCHES.REGS[get_bits(CURRENT_LATCHES.IR, 2, 0)]);
+        }
+        break;
+    case 2: // XOR
+        if (steering_bit)
+        {
+            if (sign_bit)
+            {
+
+                return (CURRENT_LATCHES.REGS[get_bits(CURRENT_LATCHES.IR, 8, 6)]) ^ (get_bits(CURRENT_LATCHES.IR, 4, 0) | 0xFFFFFFF0);
+            }
+            else
+            {
+                return (CURRENT_LATCHES.REGS[get_bits(CURRENT_LATCHES.IR, 8, 6)]) ^ (get_bits(CURRENT_LATCHES.IR, 4, 0));
+            }
+        }
+        else
+        {
+            return (CURRENT_LATCHES.REGS[get_bits(CURRENT_LATCHES.IR, 8, 6)]) ^ (CURRENT_LATCHES.REGS[get_bits(CURRENT_LATCHES.IR, 2, 0)]);
+        }
+        break;
+    case 3:
+        if (GetSR1MUX(CURRENT_LATCHES.MICROINSTRUCTION))
+        {
+            return (CURRENT_LATCHES.REGS[get_bits(CURRENT_LATCHES.IR, 8, 6)]);
+        }
+        else
+        {
+            return (CURRENT_LATCHES.REGS[get_bits(CURRENT_LATCHES.IR, 11, 9)]);
+        }
+        break;
+    }
+}
+
+int shift_gate_value()
+{
+    int right_shift = (get_bits(CURRENT_LATCHES.IR, 4, 4));
+    int arithmetical = (get_bits(CURRENT_LATCHES.IR, 5, 5));
+    int shift_ammount = Low16bits(CURRENT_LATCHES.IR & 0x000F);
+    if (right_shift)
+    {
+        if (arithmetical)
+        {
+            return (CURRENT_LATCHES.REGS[get_bits(CURRENT_LATCHES.IR, 8, 6)] / 2);
+        }
+        else
+        {
+            return (CURRENT_LATCHES.REGS[get_bits(CURRENT_LATCHES.IR, 8, 6)] >> shift_ammount);
+        }
+    }
+    else
+    {
+        return (CURRENT_LATCHES.REGS[get_bits(CURRENT_LATCHES.IR, 8, 6)] << shift_ammount);
+    }
+}
+int mdr_gate_value()
+{
+    if (GetDATA_SIZE(CURRENT_LATCHES.MICROINSTRUCTION))
+    {
+        return (CURRENT_LATCHES.MDR);
+    }
+    else
+    {
+        if (get_bits(CURRENT_LATCHES.IR, 7, 7))
+        {
+            return ((CURRENT_LATCHES.MDR >> (8 * (CURRENT_LATCHES.MAR % 2))) | 0xFFFFFF80);
+        }
+        else
+        {
+            return ((CURRENT_LATCHES.MDR >> (8 * (CURRENT_LATCHES.MAR % 2))));
+        }
+    }
+}
+
+int pp_gate_value()
+{
+    if (GetGATEPP(CURRENT_LATCHES.MICROINSTRUCTION) == 1)
+    {
+        if (GetPP(CURRENT_LATCHES.MICROINSTRUCTION) == 1)
+        {
+            return CURRENT_LATCHES.REGS[6] + 2;
+        }
+        else
+        {
+            return CURRENT_LATCHES.REGS[6] - 2;
+        }
+    }
+}
+
+int sp_gate_value()
+{
+    if (GetGATESP(CURRENT_LATCHES.MICROINSTRUCTION) == 1)
+    {
+        if (GetSP(CURRENT_LATCHES.MICROINSTRUCTION) == 1)
+        {
+            return CURRENT_LATCHES.SSP;
+        }
+        else
+        {
+            return CURRENT_LATCHES.USPSAVED;
+        }
+    }
+}
+
+int psr_gate_value()
+{
+    if (GetGATEPSR(CURRENT_LATCHES.MICROINSTRUCTION) == 1)
+    {
+        return (CURRENT_LATCHES.PRIV << 15) + (CURRENT_LATCHES.N << 2) + (CURRENT_LATCHES.Z << 1) + (CURRENT_LATCHES.P);
+    }
+}
+int vector_gate_value()
+{
+    if (GetGATEVector(CURRENT_LATCHES.MICROINSTRUCTION) == 1)
+    {
+        if (CURRENT_LATCHES.EXC == 1)
+        {
+            return 0x0200 + (CURRENT_LATCHES.EXCV << 1);
+        }
+        else
+        {
+            return 0x0200 + (CURRENT_LATCHES.INTV << 1);
+        }
+    }
+}
 void eval_bus_drivers()
 {
 
@@ -744,6 +1055,10 @@ void eval_bus_drivers()
     alu_bus_driver = alu_gate_value();
     shift_bus_driver = shift_gate_value();
     mdr_bus_driver = mdr_gate_value();
+    psr_bus_driver = psr_gate_value();
+    pp_bus_driver = pp_gate_value();
+    sp_bus_driver = sp_gate_value();
+    vector_bus_driver = vector_gate_value();
 }
 
 void drive_bus()
@@ -772,6 +1087,23 @@ void drive_bus()
     {
         BUS = Low16bits(mdr_bus_driver);
     }
+    else if (GetGATEPSR(CURRENT_LATCHES.MICROINSTRUCTION))
+    {
+        BUS = Low16bits(psr_bus_driver);
+    }
+    else if (GetGATEVector(CURRENT_LATCHES.MICROINSTRUCTION))
+    {
+        BUS = Low16bits(vector_bus_driver);
+    }
+    else if (GetGATESP(CURRENT_LATCHES.MICROINSTRUCTION))
+    {
+        BUS = Low16bits(sp_bus_driver);
+    }
+    else if (GetGATEPP(CURRENT_LATCHES.MICROINSTRUCTION))
+    {
+        BUS = Low16bits(pp_bus_driver);
+    }
+
     else
     {
         BUS = Low16bits(0);
@@ -804,6 +1136,14 @@ void latch_datapath_values()
             {
                 NEXT_LATCHES.MDR = BUS;
             }
+            else if (GetDRMUX(CURRENT_LATCHES.MICROINSTRUCTION) == 1)
+            {
+                NEXT_LATCHES.REGS[LR] = BUS;
+            }
+            else if (GetDRMUX(CURRENT_LATCHES.MICROINSTRUCTION) == 2)
+            {
+                NEXT_LATCHES.REGS[6] = BUS;
+            }
             else
             {
                 NEXT_LATCHES.MDR = BUS << (8 * (CURRENT_LATCHES.MAR % 2));
@@ -813,6 +1153,10 @@ void latch_datapath_values()
     if (GetLD_IR(CURRENT_LATCHES.MICROINSTRUCTION))
     {
         NEXT_LATCHES.IR = BUS;
+        if (DECODE(BUS) == 0xFu)
+        {
+            NEXT_LATCHES.TRAP_FLAG = 1;
+        }
     }
     if (GetLD_BEN(CURRENT_LATCHES.MICROINSTRUCTION))
     {
@@ -863,6 +1207,83 @@ void latch_datapath_values()
         case 2:
             NEXT_LATCHES.PC = adder_muxes();
             break;
+        case 3:
+            NEXT_LATCHES.PC = CURRENT_LATCHES.PC - 2;
+            break;
         }
+    }
+
+    if (GetLD_USPSAVED(CURRENT_LATCHES.MICROINSTRUCTION) == 1)
+    {
+        NEXT_LATCHES.USPSAVED = CURRENT_LATCHES.REGS[6];
+    }
+
+    if (GetLD_PRIV(CURRENT_LATCHES.MICROINSTRUCTION) == 1)
+    {
+        if (GetSetSS(CURRENT_LATCHES.MICROINSTRUCTION) == 1)
+        {
+            NEXT_LATCHES.PRIV = 0;
+        }
+        else
+        {
+            NEXT_LATCHES.PRIV = (BUS & 0x8000) >> 15;
+        }
+    }
+
+    if (GetLD_CheckEXC(CURRENT_LATCHES.MICROINSTRUCTION) == 1)
+    {
+        int Protection = 0;
+        int Unalligned = 0;
+        int UnknownOP = 0;
+
+        int Opcode = DECODE(CURRENT_LATCHES.IR);
+        if (Opcode == 0x0A || Opcode == 0x0B)
+            UnknownOP = 1;
+        if (GetLD_MAR(CURRENT_LATCHES.MICROINSTRUCTION) == 1)
+        {
+            if (CURRENT_LATCHES.PRIV == 1 && CURRENT_LATCHES.TRAP_FLAG == 0)
+            {
+                if (Opcode == 0x08)
+                    Protection = 1;
+
+                if (BUS >= 0x00u && BUS < 0x3000u)
+                {
+                    Protection = 1;
+                }
+            }
+
+            if (BUS % 2 != 0 && GetDATA_SIZE(CURRENT_LATCHES.MICROINSTRUCTION) == 1)
+            {
+                Unalligned = 1;
+            }
+        }
+
+        if (Protection == 1)
+        {
+            NEXT_LATCHES.EXCV = 0x02;
+            NEXT_LATCHES.EXC = 1;
+        }
+        else if (Unalligned == 1)
+        {
+            NEXT_LATCHES.EXCV = 0x03;
+            NEXT_LATCHES.EXC = 1;
+        }
+        else if (UnknownOP == 1)
+        {
+            NEXT_LATCHES.EXCV = 0x04;
+            NEXT_LATCHES.IR = 0;
+            NEXT_LATCHES.EXC = 1;
+        }
+    }
+
+    if (GetCLR_TrapFLG(CURRENT_LATCHES.MICROINSTRUCTION) == 1)
+    {
+        NEXT_LATCHES.TRAP_FLAG = 0;
+    }
+
+    if (GetCLR_Check(CURRENT_LATCHES.MICROINSTRUCTION) == 1)
+    {
+        NEXT_LATCHES.INT_Signal = 0;
+        NEXT_LATCHES.EXC = 0;
     }
 }
