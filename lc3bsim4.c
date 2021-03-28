@@ -90,16 +90,16 @@ enum CS_BITS
     CHECK_EXECPTION,
     CLEAR_TRAP,
     TRAP_SEMAPHORE,
-    CC,
-    SS,
+    CC_GATE,
+    SS_GATE,
     PP_GATE,
     SP_GATE,
     PSR_GATE,
     VECTOR_GATE,
     COND2,
     UNIVERSAL_STACK_POINTER,
-    DESTINATION_MUX,
-    SOURCE_MUX,
+    DEST_MUX_NEW,
+    SOURCE_MUX_NEW,
     S_POINTER,
     P_POINTER,
 
@@ -112,7 +112,7 @@ enum CS_BITS
 /* Functions to get at the control bits.                       */
 /***************************************************************/
 int GetIRD(int *x) { return (x[IRD]); }
-int GetCOND(int *x) { return ((x[COND1] << 1) + x[COND0]); }
+//int GetCOND(int *x) { return ((x[COND1] << 1) + x[COND0]); }
 int GetJ(int *x) { return ((x[J5] << 5) + (x[J4] << 4) +
                            (x[J3] << 3) + (x[J2] << 2) +
                            (x[J1] << 1) + x[J0]); }
@@ -129,7 +129,7 @@ int GetGATE_ALU(int *x) { return (x[GATE_ALU]); }
 int GetGATE_MARMUX(int *x) { return (x[GATE_MARMUX]); }
 int GetGATE_SHF(int *x) { return (x[GATE_SHF]); }
 int GetPCMUX(int *x) { return ((x[PCMUX1] << 1) + x[PCMUX0]); }
-int GetDRMUX(int *x) { return (x[DRMUX]); }
+//int GetDRMUX(int *x) { return (x[DRMUX]); }
 int GetSR1MUX(int *x) { return (x[SR1MUX]); }
 int GetADDR1MUX(int *x) { return (x[ADDR1MUX]); }
 int GetADDR2MUX(int *x) { return ((x[ADDR2MUX1] << 1) + x[ADDR2MUX0]); }
@@ -141,22 +141,22 @@ int GetDATA_SIZE(int *x) { return (x[DATA_SIZE]); }
 int GetLSHF1(int *x) { return (x[LSHF1]); }
 /* MODIFY: you can add more Get functions for your new control signals */
 
-int GetCOND(int *x) { return ((x[COND2] << 2) + (x[COND1] << 1) + x[COND0]); }
-int GetDRMUX(int *x) { return ((x[DRMUX2] << 1) + x[DRMUX]); }
-int GetSR1MUX(int *x) { return ((x[SR1MUX2] << 1) + x[SR1MUX]); }
-int GetCC_Logic(int *x) { return (x[CC_Logic]); }
-int GetCLR_TrapFLG(int *x) { return x[CLR_TrapFLG]; }
-int GetGATEVector(int *x) { return x[GATEVector]; }
-int GetLD_CheckEXC(int *x) { return x[LD_CheckEXC]; }
-int GetSetSS(int *x) { return x[SetSS]; }
-int GetLD_PRIV(int *x) { return x[LD_PRIV]; }
-int GetGATEPSR(int *x) { return x[GATEPSR]; }
-int GetPP(int *x) { return x[PP]; }
-int GetSP(int *x) { return x[SP]; }
-int GetLD_USPSAVED(int *x) { return x[LD_USPSAVED]; }
-int GetGATEPP(int *x) { return x[GATEPP]; }
-int GetGATESP(int *x) { return x[GATESP]; }
-int GetCLR_Check(int *x) { return x[CLR_Check]; }
+int GetNewConditionalBits(int *x) { return ((x[COND2] << 2) + (x[COND1] << 1) + x[COND0]); }
+int GetNewDRMux(int *x) { return (x[DRMUX] + (x[DEST_MUX_NEW] << 1)); }
+int GetNewSRMux(int *x) { return (x[SR1MUX] + (x[SOURCE_MUX_NEW] << 1)); }
+int GetGATE_CC(int *x) { return (x[CC_GATE]); }
+int GetTRAP_SEMAPHORE(int *x) { return x[TRAP_SEMAPHORE]; }
+int GetGATE_VECTOR(int *x) { return x[VECTOR_GATE]; }
+int GetEXECPTION_CHECK(int *x) { return x[CHECK_EXECPTION]; }
+int GetGATE_SS(int *x) { return x[SS_GATE]; }
+int GetLD_PRIVELEDGE(int *x) { return x[LOAD_PRIVELEDGE]; }
+int GetGATE_PSR(int *x) { return x[PSR_GATE]; }
+int GetGATE_PP(int *x) { return x[PP_GATE]; }
+int GetGATE_SP(int *x) { return x[SP_GATE]; }
+int GetLD_UniversalStackPointer(int *x) { return x[UNIVERSAL_STACK_POINTER]; }
+int GetPOINTER_PRIORITY(int *x) { return x[P_POINTER]; }
+int GetPOINTER_STACK(int *x) { return x[S_POINTER]; }
+int GetTRAP_CLEAR(int *x) { return x[CLEAR_TRAP]; }
 
 /***************************************************************/
 /* The control store rom.                                      */
@@ -215,7 +215,9 @@ typedef struct System_Latches_Struct
     int EXCV; /* Exception vector register */
     int SSP;  /* Initial value of system stack pointer */
     /* MODIFY: You may add system latches that are required by your implementation */
-    int UNIVERSAL_SPOINTER;
+    int INTERRUPT_SIGNAL;
+    int EXCEPTION_SIGNAL;
+    int POINTER;
     int TRAP_BIT;
     int PRIVELEDGE;
     //Add stuff to here too...
@@ -779,16 +781,16 @@ void eval_micro_sequencer()
             NEXT_LATCHES.STATE_NUMBER = Low16bits(GetJ(CURRENT_LATCHES.MICROINSTRUCTION)) | Low16bits(get_bits(CURRENT_LATCHES.IR, 11, 11));
             break;
         case 4:
-            NEXT_LATCHES.STATE_NUMBER = (GetJ(CURRENT_LATCHES.MICROINSTRUCTION)) ^ ((CURRENT_LATCHES.EXC ^ CURRENT_LATCHES.INT_Signal) << 3);
+            NEXT_LATCHES.STATE_NUMBER = (GetJ(CURRENT_LATCHES.MICROINSTRUCTION)) ^ ((CURRENT_LATCHES.INTERRUPT_SIGNAL ^ CURRENT_LATCHES.EXCEPTION_SIGNAL) << 3);
             break;
         case 5:
-            if (CURRENT_LATCHES.EXC)
+            if (CURRENT_LATCHES.EXCEPTION_SIGNAL)
             {
                 NEXT_LATCHES.STATE_NUMBER = 0x3F;
             }
             break;
         case 6:
-            NEXT_LATCHES.STATE_NUMBER = (GetJ(CURRENT_LATCHES.MICROINSTRUCTION)) ^ (CURRENT_LATCHES.PRIV << 4);
+            NEXT_LATCHES.STATE_NUMBER = (GetJ(CURRENT_LATCHES.MICROINSTRUCTION)) ^ (CURRENT_LATCHES.PRIVELEDGE << 4);
             break;
         }
     }
@@ -1011,7 +1013,7 @@ int sp_gate_value()
         }
         else
         {
-            return CURRENT_LATCHES.USPSAVED;
+            return CURRENT_LATCHES.POINTER;
         }
     }
 }
@@ -1020,14 +1022,14 @@ int psr_gate_value()
 {
     if (GetGATEPSR(CURRENT_LATCHES.MICROINSTRUCTION) == 1)
     {
-        return (CURRENT_LATCHES.PRIV << 15) + (CURRENT_LATCHES.N << 2) + (CURRENT_LATCHES.Z << 1) + (CURRENT_LATCHES.P);
+        return (CURRENT_LATCHES.PRIVELEDGE << 15) + (CURRENT_LATCHES.N << 2) + (CURRENT_LATCHES.Z << 1) + (CURRENT_LATCHES.P);
     }
 }
 int vector_gate_value()
 {
     if (GetGATEVector(CURRENT_LATCHES.MICROINSTRUCTION) == 1)
     {
-        if (CURRENT_LATCHES.EXC == 1)
+        if (CURRENT_LATCHES.EXCEPTION_SIGNAL == 1)
         {
             return 0x0200 + (CURRENT_LATCHES.EXCV << 1);
         }
@@ -1138,7 +1140,7 @@ void latch_datapath_values()
             }
             else if (GetDRMUX(CURRENT_LATCHES.MICROINSTRUCTION) == 1)
             {
-                NEXT_LATCHES.REGS[LR] = BUS;
+                NEXT_LATCHES.REGS[7] = BUS;
             }
             else if (GetDRMUX(CURRENT_LATCHES.MICROINSTRUCTION) == 2)
             {
@@ -1155,7 +1157,7 @@ void latch_datapath_values()
         NEXT_LATCHES.IR = BUS;
         if (DECODE(BUS) == 0xFu)
         {
-            NEXT_LATCHES.TRAP_FLAG = 1;
+            NEXT_LATCHES.TRAP_BIT = 1;
         }
     }
     if (GetLD_BEN(CURRENT_LATCHES.MICROINSTRUCTION))
@@ -1215,18 +1217,18 @@ void latch_datapath_values()
 
     if (GetLD_USPSAVED(CURRENT_LATCHES.MICROINSTRUCTION) == 1)
     {
-        NEXT_LATCHES.USPSAVED = CURRENT_LATCHES.REGS[6];
+        NEXT_LATCHES.POINTER = CURRENT_LATCHES.REGS[6];
     }
 
     if (GetLD_PRIV(CURRENT_LATCHES.MICROINSTRUCTION) == 1)
     {
         if (GetSetSS(CURRENT_LATCHES.MICROINSTRUCTION) == 1)
         {
-            NEXT_LATCHES.PRIV = 0;
+            NEXT_LATCHES.PRIVELEDGE = 0;
         }
         else
         {
-            NEXT_LATCHES.PRIV = (BUS & 0x8000) >> 15;
+            NEXT_LATCHES.PRIVELEDGE = (BUS & 0x8000) >> 15;
         }
     }
 
@@ -1241,7 +1243,7 @@ void latch_datapath_values()
             UnknownOP = 1;
         if (GetLD_MAR(CURRENT_LATCHES.MICROINSTRUCTION) == 1)
         {
-            if (CURRENT_LATCHES.PRIV == 1 && CURRENT_LATCHES.TRAP_FLAG == 0)
+            if (CURRENT_LATCHES.PRIVELEDGE == 1 && CURRENT_LATCHES.TRAP_BIT == 0)
             {
                 if (Opcode == 0x08)
                     Protection = 1;
@@ -1261,29 +1263,29 @@ void latch_datapath_values()
         if (Protection == 1)
         {
             NEXT_LATCHES.EXCV = 0x02;
-            NEXT_LATCHES.EXC = 1;
+            NEXT_LATCHES.EXCEPTION_SIGNAL = 1;
         }
         else if (Unalligned == 1)
         {
             NEXT_LATCHES.EXCV = 0x03;
-            NEXT_LATCHES.EXC = 1;
+            NEXT_LATCHES.EXCEPTION_SIGNAL = 1;
         }
         else if (UnknownOP == 1)
         {
             NEXT_LATCHES.EXCV = 0x04;
             NEXT_LATCHES.IR = 0;
-            NEXT_LATCHES.EXC = 1;
+            NEXT_LATCHES.EXCEPTION_SIGNAL = 1;
         }
     }
 
     if (GetCLR_TrapFLG(CURRENT_LATCHES.MICROINSTRUCTION) == 1)
     {
-        NEXT_LATCHES.TRAP_FLAG = 0;
+        NEXT_LATCHES.TRAP_BIT = 0;
     }
 
     if (GetCLR_Check(CURRENT_LATCHES.MICROINSTRUCTION) == 1)
     {
-        NEXT_LATCHES.INT_Signal = 0;
-        NEXT_LATCHES.EXC = 0;
+        NEXT_LATCHES.INTERRUPT_SIGNAL = 0;
+        NEXT_LATCHES.EXCEPTION_SIGNAL = 0;
     }
 }
