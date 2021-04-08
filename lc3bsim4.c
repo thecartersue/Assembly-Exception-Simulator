@@ -87,21 +87,14 @@ enum CS_BITS
     LSHF1,
     /* MODIFY: you have to add all your new control signals */
     COND2,
-    GATESP,
-    GATEPP,
-    LD_USPSAVED,
-    SP,
-    PP,
-    GATEPSR,
-    LD_PRIV,
-    SetSS,
-    LD_CheckEXC,
-    CLR_Check,
-    GATEVector,
-    CLR_TrapFLG,
-    CC_Logic,
-    DRMUX2,
-    SR1MUX2,
+    SPMUX,
+    GATE_SPMUX
+    SR1MUX1
+    DR1MUX1
+    INTEXCMUX
+    MARMUX1
+    GATE_PSR
+    LD_PRIV
 
     CONTROL_STORE_BITS
 } CS_BITS;
@@ -131,7 +124,7 @@ int GetPCMUX(int *x) { return ((x[PCMUX1] << 1) + x[PCMUX0]); }
 //int GetSR1MUX(int *x) { return (x[SR1MUX]); }
 int GetADDR1MUX(int *x) { return (x[ADDR1MUX]); }
 int GetADDR2MUX(int *x) { return ((x[ADDR2MUX1] << 1) + x[ADDR2MUX0]); }
-int GetMARMUX(int *x) { return (x[MARMUX]); }
+//int GetMARMUX(int *x) { return (x[MARMUX]); }
 int GetALUK(int *x) { return ((x[ALUK1] << 1) + x[ALUK0]); }
 int GetMIO_EN(int *x) { return (x[MIO_EN]); }
 int GetR_W(int *x) { return (x[R_W]); }
@@ -139,21 +132,26 @@ int GetDATA_SIZE(int *x) { return (x[DATA_SIZE]); }
 int GetLSHF1(int *x) { return (x[LSHF1]); }
 /* MODIFY: you can add more Get functions for your new control signals */
 int GetCOND(int *x) { return ((x[COND2] << 2) + (x[COND1] << 1) + x[COND0]); }
-int GetDRMUX(int *x) { return ((x[DRMUX2] << 1) + x[DRMUX]); }
-int GetSR1MUX(int *x) { return ((x[SR1MUX2] << 1) + x[SR1MUX]); }
-int GetCC_Logic(int *x) { return (x[CC_Logic]); }
-int GetCLR_TrapFLG(int *x) { return x[CLR_TrapFLG]; }
-int GetGATEVector(int *x) { return x[GATEVector]; }
-int GetLD_CheckEXC(int *x) { return x[LD_CheckEXC]; }
-int GetSetSS(int *x) { return x[SetSS]; }
+int GetMARMUX(int *x) { return ( (x[MARMUX1] << 1) + x[MARMUX]); }
+int GetDRMUX(int *x) { return ((x[DRMUX1] << 1) + x[DRMUX]); }
+int GetSR1MUX(int *x) { return ((x[SR1MUX1] << 1) + x[SR1MUX]); }
+//int GetCC_Logic(int *x) { return (x[CC_Logic]); }
+//int GetCLR_TrapFLG(int *x) { return x[CLR_TrapFLG]; }
+//int GetGATEVector(int *x) { return x[GATEVector]; }
+//int GetLD_CheckEXC(int *x) { return x[LD_CheckEXC]; }
+//int GetSetSS(int *x) { return x[SetSS]; }
 int GetLD_PRIV(int *x) { return x[LD_PRIV]; }
-int GetGATEPSR(int *x) { return x[GATEPSR]; }
-int GetPP(int *x) { return x[PP]; }
-int GetSP(int *x) { return x[SP]; }
-int GetLD_USPSAVED(int *x) { return x[LD_USPSAVED]; }
-int GetGATEPP(int *x) { return x[GATEPP]; }
-int GetGATESP(int *x) { return x[GATESP]; }
-int GetCLR_Check(int *x) { return x[CLR_Check]; }
+int GetGATEPSR(int *x) { return x[GATE_PSR]; }
+int GetGATESPMUX(int *x) { return x[GATE_SPMUX]; }
+int GetSPMUX(int *x) { return x[SPMUX]; }
+int GetINTEXCMUX(int *x) { return x[INTEXCMUX]; }
+//int GetPP(int *x) { return x[PP]; }
+//int GetSP(int *x) { return x[SP]; }
+//int GetLD_USPSAVED(int *x) { return x[LD_USPSAVED]; }
+//int GetGATEPP(int *x) { return x[GATEPP]; }
+//int GetGATESP(int *x) { return x[GATESP]; }
+//int GetCLR_Check(int *x) { return x[CLR_Check]; }
+
 
 /***************************************************************/
 /* The control store rom.                                      */
@@ -215,14 +213,9 @@ typedef struct System_Latches_Struct
     int I;
     int E;
     int USP;
+    int PSR;
     int PRIVELEDGE;
     int PRIORITY;
-    int N_SAVED;
-    int Z_SAVED;
-    int P_SAVED;
-    int PRIVELEDGE_SAVED;
-    int PRIORITY_SAVED;
-    int TRAP_FLAG;
 
 } System_Latches;
 
