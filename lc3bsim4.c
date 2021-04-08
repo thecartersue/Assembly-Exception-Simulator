@@ -217,11 +217,6 @@ typedef struct System_Latches_Struct
     int USP;
     int PRIVELEDGE;
     int PRIORITY;
-    int N_SAVED;
-    int Z_SAVED;
-    int P_SAVED;
-    int PRIVELEDGE_SAVED;
-    int PRIORITY_SAVED;
     int TRAP_FLAG;
 
 } System_Latches;
