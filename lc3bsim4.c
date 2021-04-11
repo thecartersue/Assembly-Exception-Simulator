@@ -89,7 +89,8 @@ enum CS_BITS
     COND2,
     LD_USP,
     LD_SSP,
-    SPMUX,
+    SPMUX1,
+    SPMUX0,
     LD_PSR,
     GATE_PSR,
     PSHPOPMUX,
@@ -137,11 +138,11 @@ int GetLSHF1(int *x) { return (x[LSHF1]); }
 int GetCOND(int *x) { return ((x[COND2] << 2) + (x[COND1] << 1) + x[COND0]); }
 int GetLD_USP(int *x){return (x[LD_USP]);}
 int GetLD_SSP(int *x){return (x[LD_SSP]);}
-int GetSPMUX(int *x) { return (x[SPMUX]); }
+int GetSPMUX(int *x) { return ( (x[SPMUX1] << 1) + x[SPMUX0]); }
 int GetLD_PSR(int *x){return (x[LD_PSR]);}
 int GetGATEPSR(int *x) { return (x[GATE_PSR]); }
 int GetPSHPOPMUX(int *x) {return (x[PSHPOPMUX]);}
-int GetGATE_PSHPOPMUX(int *x){(x[GATE_PSHPOPMUX]);}
+int GetGATE_PSHPOPMUX(int *x){ return (x[GATE_PSHPOPMUX]);}
 int GetMARMUX(int *x) { return ((x[MARMUX1] << 1) + x[MARMUX]); }
 int GetDRMUX(int *x) { return ((x[DRMUX1] << 1) + x[DRMUX]); }
 int GetSR1MUX(int *x) { return ((x[SR1MUX1] << 1) + x[SR1MUX]); }
@@ -357,6 +358,7 @@ void rdump(FILE *dumpsim_file)
     printf("PC           : 0x%0.4x\n", CURRENT_LATCHES.PC);
     printf("IR           : 0x%0.4x\n", CURRENT_LATCHES.IR);
     printf("STATE_NUMBER : 0x%0.4x\n\n", CURRENT_LATCHES.STATE_NUMBER);
+    printf("NEXT_STATE : 0x%0.4x\n\n", GetJ(CURRENT_LATCHES.MICROINSTRUCTION));
     printf("BUS          : 0x%0.4x\n", BUS);
     printf("MDR          : 0x%0.4x\n", CURRENT_LATCHES.MDR);
     printf("MAR          : 0x%0.4x\n", CURRENT_LATCHES.MAR);
@@ -610,6 +612,7 @@ void initialize(char *argv[], int num_prog_files)
         CURRENT_LATCHES.E = 0; /* Initial value of EXC */
         CURRENT_LATCHES.PRIVELEDGE = 1;
         CURRENT_LATCHES.USP = 0xFE00;
+        CURRENT_LATCHES.REGS[6] = 0xFE00;
 
     NEXT_LATCHES = CURRENT_LATCHES;
 
@@ -787,11 +790,11 @@ void eval_micro_sequencer()
             break;
         case 4:
             //compare the interrupt bit
-            NEXT_LATCHES.STATE_NUMBER = Low16bits(GetJ(CURRENT_LATCHES.MICROINSTRUCTION)) | Low16bits(CURRENT_LATCHES.I << 4);
+            NEXT_LATCHES.STATE_NUMBER = Low16bits(GetJ(CURRENT_LATCHES.MICROINSTRUCTION)) | Low16bits(CURRENT_LATCHES.E << 5);
             break;
         case 5:
             //compare the exception bit
-            NEXT_LATCHES.STATE_NUMBER = Low16bits(GetJ(CURRENT_LATCHES.MICROINSTRUCTION)) | Low16bits(CURRENT_LATCHES.E << 5);
+            NEXT_LATCHES.STATE_NUMBER = Low16bits(GetJ(CURRENT_LATCHES.MICROINSTRUCTION)) | Low16bits(CURRENT_LATCHES.I << 4);
             break;
         }
     }
@@ -1005,10 +1008,8 @@ int psh_pop_gate_value()
     if (GetPSHPOPMUX(CURRENT_LATCHES.MICROINSTRUCTION))
     {
         return CURRENT_LATCHES.REGS[6] + 2;
-    }else{
-return CURRENT_LATCHES.REGS[6] - 2;
     }
-    
+        return CURRENT_LATCHES.REGS[6] - 2;
 }
 
 int psr_gate_value()
@@ -1035,6 +1036,7 @@ void eval_bus_drivers()
     mdr_bus_driver = mdr_gate_value();
     psr_bus_driver = psr_gate_value();
     psh_pop_bus_driver = psh_pop_gate_value();
+    printf("0x%X\n",psh_pop_bus_driver);
 }
 
 void drive_bus()
@@ -1067,6 +1069,9 @@ void drive_bus()
     else if (GetGATEPSR(CURRENT_LATCHES.MICROINSTRUCTION))
     {
         BUS = Low16bits(psr_bus_driver);
+    }else if (GetGATE_PSHPOPMUX(CURRENT_LATCHES.MICROINSTRUCTION)){
+        BUS = Low16bits(psh_pop_bus_driver);
+        //printf(psh_pop_gate_value());
     }
     else
     {
@@ -1161,21 +1166,19 @@ void latch_datapath_values()
             NEXT_LATCHES.REGS[7] = BUS;
             break;
             case 2:
-             NEXT_LATCHES.REGS[6] = BUS;
+             if(GetSPMUX(CURRENT_LATCHES.MICROINSTRUCTION) == 0){
+                NEXT_LATCHES.REGS[6] = BUS;
+             }
+             if(GetSPMUX(CURRENT_LATCHES.MICROINSTRUCTION) == 1){
+                 NEXT_LATCHES.PRIVELEDGE = 1;
+                 NEXT_LATCHES.REGS[6] = CURRENT_LATCHES.USP;
+             }
+             if(GetSPMUX(CURRENT_LATCHES.MICROINSTRUCTION) == 2){
+                 NEXT_LATCHES.PRIVELEDGE = 0;
+                 NEXT_LATCHES.REGS[6] = CURRENT_LATCHES.SSP;
+             }
              break;
 
-        }
-
-        switch(GetSPMUX(CURRENT_LATCHES.MICROINSTRUCTION)){
-            case 0:
-            NEXT_LATCHES.REGS[6] = BUS;
-            break;
-            case 1:
-            NEXT_LATCHES.REGS[6] = CURRENT_LATCHES.USP;
-            break;
-            case 2:
-            NEXT_LATCHES.REGS[6] = CURRENT_LATCHES.SSP;
-            break;
         }
     }
     if (GetLD_CC(CURRENT_LATCHES.MICROINSTRUCTION))
