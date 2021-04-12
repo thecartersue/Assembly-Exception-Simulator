@@ -792,6 +792,7 @@ void eval_micro_sequencer()
         case 5:
             //compare the exception bit
             NEXT_LATCHES.STATE_NUMBER = Low16bits(GetJ(CURRENT_LATCHES.MICROINSTRUCTION)) | Low16bits(CURRENT_LATCHES.I << 4);
+            NEXT_LATCHES.I = 0;
             break;
         }
     }
@@ -1121,9 +1122,9 @@ void latch_datapath_values()
     {
         if (GetMIO_EN(CURRENT_LATCHES.MICROINSTRUCTION))
         {
-            if(CURRENT_LATCHES.READY){
+            //if(CURRENT_LATCHES.READY){
 NEXT_LATCHES.MDR = memory_data;
-            }
+            //}
             
         }
         else
@@ -1233,10 +1234,10 @@ NEXT_LATCHES.MDR = memory_data;
     }
 
     if(GetLD_PSR(CURRENT_LATCHES.MICROINSTRUCTION)){
-        NEXT_LATCHES.PRIVELEDGE = BUS;
-        NEXT_LATCHES.N = BUS;
-        NEXT_LATCHES.P = BUS;
-        NEXT_LATCHES.Z = BUS;
+        NEXT_LATCHES.PRIVELEDGE = (get_bits(BUS,15,15) >> 15);
+        NEXT_LATCHES.N = (get_bits(BUS, 2, 2) >> 2);
+        NEXT_LATCHES.Z = (get_bits(BUS, 1, 1) >> 1);
+        NEXT_LATCHES.P =  (get_bits(BUS, 0, 0));
     }
       if(GetLD_VECTOR(CURRENT_LATCHES.MICROINSTRUCTION)){
           if (GetINTEXCMUX(CURRENT_LATCHES.MICROINSTRUCTION))
