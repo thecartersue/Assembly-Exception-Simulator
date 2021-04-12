@@ -210,6 +210,7 @@ typedef struct System_Latches_Struct
     int USP;
     int PRIVELEDGE;
     int VECTOR;
+    int TRAP_FLAG;
 
 } System_Latches;
 
@@ -364,13 +365,14 @@ void rdump(FILE *dumpsim_file)
     printf("MAR          : 0x%0.4x\n", CURRENT_LATCHES.MAR);
     printf("CCs: N = %d  Z = %d  P = %d\n", CURRENT_LATCHES.N, CURRENT_LATCHES.Z, CURRENT_LATCHES.P);
     printf("BEN          : 0x%0.4x\n", CURRENT_LATCHES.BEN);
+    printf("READY BIT    : 0x%0.4x\n", CURRENT_LATCHES.READY);
     printf("SSP          : 0x%0.4x\n", CURRENT_LATCHES.SSP);
     printf("USP          : 0x%0.4x\n", CURRENT_LATCHES.USP);
     printf("EXC SIG      : 0x%0.4x\n", CURRENT_LATCHES.E);
     printf("EXC VEC      : 0x%0.4x\n", CURRENT_LATCHES.EXCV);
     printf("INT SIG      : 0x%0.4x\n", CURRENT_LATCHES.I);
     printf("INT VEC      : 0x%0.4x\n", CURRENT_LATCHES.INTV);
-    printf("VEC          : 0x%0.4x\n", CURRENT_LATCHES.INTV);
+    printf("VEC          : 0x%0.4x\n", CURRENT_LATCHES.VECTOR);
     printf("PRIVELEGE    : 0x%0.4x\n", CURRENT_LATCHES.PRIVELEDGE);
     printf("Registers:\n");
     for (k = 0; k < LC_3b_REGS; k++)
@@ -613,6 +615,7 @@ void initialize(char *argv[], int num_prog_files)
         CURRENT_LATCHES.PRIVELEDGE = 1;
         CURRENT_LATCHES.USP = 0xFE00;
         CURRENT_LATCHES.REGS[6] = 0xFE00;
+        CURRENT_LATCHES.TRAP_FLAG = 0;
 
     NEXT_LATCHES = CURRENT_LATCHES;
 
@@ -756,6 +759,7 @@ void eval_micro_sequencer()
     if (CYCLE_COUNT == 299)
     {
         NEXT_LATCHES.I = 1;
+        NEXT_LATCHES.INTV = 0x01;
     }
 
     /* 
@@ -766,6 +770,9 @@ void eval_micro_sequencer()
     if (GetIRD(CURRENT_LATCHES.MICROINSTRUCTION))
     {
         NEXT_LATCHES.STATE_NUMBER = Low16bits(get_opcode());
+        if(get_opcode() == 0xF){
+            NEXT_LATCHES.TRAP_FLAG = 1;
+        }
     }
     else
     {
@@ -805,6 +812,7 @@ void eval_micro_sequencer()
     }
 }
 
+int random_address = 0;
 void cycle_memory()
 {
 
@@ -820,12 +828,20 @@ void cycle_memory()
         //Increment the cycle counter
         memory_access_cycle_counter++;
         //if the memory is ready,
-        if (NEXT_LATCHES.READY)
+        if (CURRENT_LATCHES.READY)
         {
             switch (GetR_W(CURRENT_LATCHES.MICROINSTRUCTION))
             {
             case 0: //Read From Memory
+                
+                random_address = CURRENT_LATCHES.MAR;
+                printf("Reading From Location 0x%X", CURRENT_LATCHES.MAR);
                 memory_data = (MEMORY[CURRENT_LATCHES.MAR >> 1][1] << 8) + (MEMORY[CURRENT_LATCHES.MAR >> 1][0]);
+                printf("Memory Data Read: 0x%X\n", memory_data);
+                for(int i = 0; i < 10; i+=2){
+                    printf("Memory Contents: \n", (MEMORY[(random_address+i) >> 1][1] << 8) + (MEMORY[(random_address+i)>> 1][0]));
+                }
+                
                 break;
             case 1: // WriteTo Memory
 
@@ -857,7 +873,7 @@ void cycle_memory()
             NEXT_LATCHES.READY = 1;
         }
         //if it is the fifth cycle, we are done accessing memory
-        if (memory_access_cycle_counter >= 5)
+        if (memory_access_cycle_counter == 5)
         {
             memory_access_cycle_counter = 0;
             NEXT_LATCHES.READY = 0;
@@ -1036,7 +1052,7 @@ void eval_bus_drivers()
     mdr_bus_driver = mdr_gate_value();
     psr_bus_driver = psr_gate_value();
     psh_pop_bus_driver = psh_pop_gate_value();
-    printf("0x%X\n",psh_pop_bus_driver);
+    printf("0x%X\n",mar_mux_bus_driver);
 }
 
 void drive_bus()
@@ -1092,19 +1108,21 @@ void latch_datapath_values()
     if (GetLD_MAR(CURRENT_LATCHES.MICROINSTRUCTION))
     {
         NEXT_LATCHES.MAR = BUS;
-        if (CURRENT_LATCHES.PRIVELEDGE == 1 && (get_bits(CURRENT_LATCHES.IR, 15, 12) != 0x0F))
+        if (CURRENT_LATCHES.PRIVELEDGE == 1 && CURRENT_LATCHES.TRAP_FLAG != 1)
         {
             if ((get_bits(CURRENT_LATCHES.IR, 15, 12) == 0x08))
             {
 
                 NEXT_LATCHES.EXCV = 0x02;
                 NEXT_LATCHES.E = 1;
+                NEXT_LATCHES.TRAP_FLAG = 1;
             }
 
             if (BUS >= 0x00u && BUS < 0x3000u)
             {
                 NEXT_LATCHES.EXCV = 0x02;
                 NEXT_LATCHES.E = 1;
+                NEXT_LATCHES.TRAP_FLAG = 1;
             }
         }
 
@@ -1112,6 +1130,7 @@ void latch_datapath_values()
         {
             NEXT_LATCHES.EXCV = 0x03;
             NEXT_LATCHES.E = 1;
+            NEXT_LATCHES.TRAP_FLAG = 1;
         }
     }
 
@@ -1119,7 +1138,10 @@ void latch_datapath_values()
     {
         if (GetMIO_EN(CURRENT_LATCHES.MICROINSTRUCTION))
         {
-            NEXT_LATCHES.MDR = memory_data;
+            if(CURRENT_LATCHES.READY){
+NEXT_LATCHES.MDR = memory_data;
+            }
+            
         }
         else
         {
@@ -1142,13 +1164,15 @@ void latch_datapath_values()
             NEXT_LATCHES.EXCV = 0x04;
             NEXT_LATCHES.IR = 0;
             NEXT_LATCHES.E = 1;
+            NEXT_LATCHES.TRAP_FLAG = 1;
         }
-        if (CURRENT_LATCHES.PRIVELEDGE == 1 && (get_bits(CURRENT_LATCHES.IR, 15, 12) != 0x0F))
+        if (CURRENT_LATCHES.PRIVELEDGE == 1 && CURRENT_LATCHES.TRAP_FLAG != 1)
         {
             if ((get_bits(CURRENT_LATCHES.IR, 15, 12) == 0x08))
             {
                 NEXT_LATCHES.EXCV = 0x02;
                 NEXT_LATCHES.E = 1;
+                NEXT_LATCHES.TRAP_FLAG = 1;
             }
         }
     }
@@ -1172,10 +1196,13 @@ void latch_datapath_values()
              if(GetSPMUX(CURRENT_LATCHES.MICROINSTRUCTION) == 1){
                  NEXT_LATCHES.PRIVELEDGE = 1;
                  NEXT_LATCHES.REGS[6] = CURRENT_LATCHES.USP;
+                 NEXT_LATCHES.E = 0;
+
              }
              if(GetSPMUX(CURRENT_LATCHES.MICROINSTRUCTION) == 2){
                  NEXT_LATCHES.PRIVELEDGE = 0;
                  NEXT_LATCHES.REGS[6] = CURRENT_LATCHES.SSP;
+                 NEXT_LATCHES.E = 0;
              }
              break;
 
@@ -1229,11 +1256,14 @@ void latch_datapath_values()
         NEXT_LATCHES.Z = BUS;
     }
       if(GetLD_VECTOR(CURRENT_LATCHES.MICROINSTRUCTION)){
+          printf("Loading Vector...");
           if (GetINTEXCMUX(CURRENT_LATCHES.MICROINSTRUCTION))
     {
         NEXT_LATCHES.VECTOR = 0x0200 + (CURRENT_LATCHES.EXCV << 1);
+        printf("0x%X\n", NEXT_LATCHES.VECTOR);
     }else{
  NEXT_LATCHES.VECTOR = 0x0200 + (CURRENT_LATCHES.INTV << 1);
+ printf("0x%X\n", NEXT_LATCHES.VECTOR);
     }
    
   }

@@ -4,7 +4,7 @@
 		LDW R0,R0,#0
 		AND R3,R3,#0
 		ADD	R3,R3,#1
-		STW R3,R0,#0
+		STW R0,R3,#0
 
 		LEA R0, BEGIN
 		LDW R0,R0,#0
