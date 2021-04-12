@@ -359,21 +359,11 @@ void rdump(FILE *dumpsim_file)
     printf("PC           : 0x%0.4x\n", CURRENT_LATCHES.PC);
     printf("IR           : 0x%0.4x\n", CURRENT_LATCHES.IR);
     printf("STATE_NUMBER : 0x%0.4x\n\n", CURRENT_LATCHES.STATE_NUMBER);
-    printf("NEXT_STATE : 0x%0.4x\n\n", GetJ(CURRENT_LATCHES.MICROINSTRUCTION));
     printf("BUS          : 0x%0.4x\n", BUS);
     printf("MDR          : 0x%0.4x\n", CURRENT_LATCHES.MDR);
     printf("MAR          : 0x%0.4x\n", CURRENT_LATCHES.MAR);
     printf("CCs: N = %d  Z = %d  P = %d\n", CURRENT_LATCHES.N, CURRENT_LATCHES.Z, CURRENT_LATCHES.P);
-    printf("BEN          : 0x%0.4x\n", CURRENT_LATCHES.BEN);
-    printf("READY BIT    : 0x%0.4x\n", CURRENT_LATCHES.READY);
-    printf("SSP          : 0x%0.4x\n", CURRENT_LATCHES.SSP);
-    printf("USP          : 0x%0.4x\n", CURRENT_LATCHES.USP);
-    printf("EXC SIG      : 0x%0.4x\n", CURRENT_LATCHES.E);
-    printf("EXC VEC      : 0x%0.4x\n", CURRENT_LATCHES.EXCV);
-    printf("INT SIG      : 0x%0.4x\n", CURRENT_LATCHES.I);
-    printf("INT VEC      : 0x%0.4x\n", CURRENT_LATCHES.INTV);
-    printf("VEC          : 0x%0.4x\n", CURRENT_LATCHES.VECTOR);
-    printf("PRIVELEGE    : 0x%0.4x\n", CURRENT_LATCHES.PRIVELEDGE);
+
     printf("Registers:\n");
     for (k = 0; k < LC_3b_REGS; k++)
         printf("%d: 0x%0.4x\n", k, CURRENT_LATCHES.REGS[k]);
@@ -835,13 +825,7 @@ void cycle_memory()
             case 0: //Read From Memory
                 
                 random_address = CURRENT_LATCHES.MAR;
-                printf("Reading From Location 0x%X", CURRENT_LATCHES.MAR);
-                memory_data = (MEMORY[CURRENT_LATCHES.MAR >> 1][1] << 8) + (MEMORY[CURRENT_LATCHES.MAR >> 1][0]);
-                printf("Memory Data Read: 0x%X\n", memory_data);
-                for(int i = 0; i < 10; i+=2){
-                    printf("Memory Contents: \n", (MEMORY[(random_address+i) >> 1][1] << 8) + (MEMORY[(random_address+i)>> 1][0]));
-                }
-                
+                memory_data = (MEMORY[CURRENT_LATCHES.MAR >> 1][1] << 8) + (MEMORY[CURRENT_LATCHES.MAR >> 1][0]);    
                 break;
             case 1: // WriteTo Memory
 
@@ -1052,7 +1036,6 @@ void eval_bus_drivers()
     mdr_bus_driver = mdr_gate_value();
     psr_bus_driver = psr_gate_value();
     psh_pop_bus_driver = psh_pop_gate_value();
-    printf("0x%X\n",mar_mux_bus_driver);
 }
 
 void drive_bus()
@@ -1256,14 +1239,11 @@ NEXT_LATCHES.MDR = memory_data;
         NEXT_LATCHES.Z = BUS;
     }
       if(GetLD_VECTOR(CURRENT_LATCHES.MICROINSTRUCTION)){
-          printf("Loading Vector...");
           if (GetINTEXCMUX(CURRENT_LATCHES.MICROINSTRUCTION))
     {
         NEXT_LATCHES.VECTOR = 0x0200 + (CURRENT_LATCHES.EXCV << 1);
-        printf("0x%X\n", NEXT_LATCHES.VECTOR);
     }else{
  NEXT_LATCHES.VECTOR = 0x0200 + (CURRENT_LATCHES.INTV << 1);
- printf("0x%X\n", NEXT_LATCHES.VECTOR);
     }
    
   }
